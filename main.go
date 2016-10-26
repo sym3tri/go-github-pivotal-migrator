@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/coreos/pkg/flagutil"
 	"github.com/google/go-github/github"
@@ -91,7 +92,13 @@ func initClients() {
 }
 
 func migrateIssue(repo string, is *github.Issue) {
-	fmt.Println("\n===== begin =====\n")
+	fmt.Printf("\n===== migrating issue number: %d =====\n", *is.Number)
+	fmt.Printf("original issue: %s\n", *is.HTMLURL)
+
+	if strings.Contains(*is.HTMLURL, "pull") {
+		fmt.Println("issue is a pull request, skipping.")
+		return
+	}
 
 	var newStory *pivotal.Story
 	var err error
@@ -105,6 +112,7 @@ func migrateIssue(repo string, is *github.Issue) {
 		if err != nil {
 			log.Fatalf("error creating story: %v", err)
 		}
+		fmt.Printf("created pivotal story: %s\n", newStory.URL)
 	}
 
 	ghComments, _, err := ghSvc.ListComments(flags.owner, repo, *is.Number, &github.IssueListCommentsOptions{
@@ -116,27 +124,27 @@ func migrateIssue(repo string, is *github.Issue) {
 		log.Fatalf("failed to list gh comments for repo: %s, issue %d: error: %v", repo, *is.Number, err)
 	}
 
-	fmt.Printf("found %d comments for issue number: %d", len(ghComments), *is.Number)
-	for _, cm := range ghComments {
-		commentReq := convertComment(cm)
-		if flags.dryRun {
-			printIssueComment(cm)
-			printStoryComment(commentReq)
-		} else {
-			_, _, err := ptSvc.AddComment(flags.ptProjId, newStory.Id, commentReq)
-			if err != nil {
-				log.Fatalf("error creating comment: %v", err)
+	if len(ghComments) > 0 {
+		fmt.Printf("migrating %d comments", len(ghComments))
+		for _, cm := range ghComments {
+			commentReq := convertComment(cm)
+			if flags.dryRun {
+				printIssueComment(cm)
+				printStoryComment(commentReq)
+			} else {
+				_, _, err := ptSvc.AddComment(flags.ptProjId, newStory.Id, commentReq)
+				if err != nil {
+					log.Fatalf("error creating comment: %v", err)
+				}
 			}
 		}
 	}
-
-	fmt.Println("\n===== end =====\n")
 }
 
 func convertIssue(repo string, is *github.Issue) *pivotal.StoryRequest {
 	labels := []*pivotal.Label{
 		&pivotal.Label{Name: "github-migrated"},
-		&pivotal.Label{Name: fmt.Sprintf("github-repo/%s", repo)},
+		&pivotal.Label{Name: fmt.Sprintf("migrated-repo/%s", repo)},
 	}
 
 	bodyFmt := "%s\n```"
