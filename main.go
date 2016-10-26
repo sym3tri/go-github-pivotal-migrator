@@ -14,6 +14,9 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// make sure this exists in your repo
+const migratedLabel = "migrated-pivotal"
+
 var (
 	flags = struct {
 		owner    string
@@ -91,12 +94,31 @@ func initClients() {
 	ghSvc = ghClient.Issues
 }
 
+func alreadyMigrated(is *github.Issue) bool {
+	if len(is.Labels) == 0 {
+		return false
+	}
+
+	for _, l := range is.Labels {
+		if l.Name != nil && *l.Name == migratedLabel {
+			return true
+		}
+	}
+
+	return false
+}
+
 func migrateIssue(repo string, is *github.Issue) {
 	fmt.Printf("\n===== migrating issue number: %d =====\n", *is.Number)
 	fmt.Printf("original issue: %s\n", *is.HTMLURL)
 
 	if strings.Contains(*is.HTMLURL, "pull") {
 		fmt.Println("issue is a pull request, skipping.")
+		return
+	}
+
+	if alreadyMigrated(is) {
+		fmt.Println("issue already migrated, skipping.")
 		return
 	}
 
@@ -125,7 +147,7 @@ func migrateIssue(repo string, is *github.Issue) {
 	}
 
 	if len(ghComments) > 0 {
-		fmt.Printf("migrating %d comments", len(ghComments))
+		fmt.Printf("migrating %d comments...", len(ghComments))
 		for _, cm := range ghComments {
 			commentReq := convertComment(cm)
 			if flags.dryRun {
@@ -138,6 +160,12 @@ func migrateIssue(repo string, is *github.Issue) {
 				}
 			}
 		}
+	}
+
+	// apply migrated label
+	_, _, err = ghSvc.AddLabelsToIssue(flags.owner, repo, *is.Number, []string{migratedLabel})
+	if err != nil {
+		log.Fatalf("failed to add '%s' label to gh issue for repo: %s, issue %d: error: %v", migratedLabel, repo, *is.Number, err)
 	}
 }
 
