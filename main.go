@@ -96,7 +96,7 @@ func migrateIssue(repo string, is *github.Issue) {
 	var newStory *pivotal.Story
 	var err error
 
-	storyReq := convertIssue(is)
+	storyReq := convertIssue(repo, is)
 	if flags.dryRun {
 		printIssue(is)
 		printStory(storyReq)
@@ -133,9 +133,10 @@ func migrateIssue(repo string, is *github.Issue) {
 	fmt.Println("\n===== end =====\n")
 }
 
-func convertIssue(is *github.Issue) *pivotal.StoryRequest {
+func convertIssue(repo string, is *github.Issue) *pivotal.StoryRequest {
 	labels := []*pivotal.Label{
 		&pivotal.Label{Name: "github-migrated"},
+		&pivotal.Label{Name: fmt.Sprintf("github-repo/%s", repo)},
 	}
 
 	bodyFmt := "%s\n```"
@@ -193,16 +194,21 @@ Labels: %q
 }
 
 func printStory(sr *pivotal.StoryRequest) {
+	labels := []string{}
+	for _, s := range *sr.Labels {
+		labels = append(labels, s.Name)
+	}
+
 	fmtStr := `
 --- story ---
 Name: %s
 Description: %s
 Type: %s
 State: %s
-Labels: %v
+Labels: %q
 --- /story ---
 `
-	fmt.Printf(fmtStr, sr.Name, trunc(sr.Description), sr.Type, sr.State, *sr.Labels)
+	fmt.Printf(fmtStr, sr.Name, trunc(sr.Description), sr.Type, sr.State, labels)
 }
 
 func printIssueComment(cm *github.IssueComment) {
