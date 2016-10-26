@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/coreos/pkg/flagutil"
 	"github.com/google/go-github/github"
